@@ -13,6 +13,9 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
+  <!-- Google Translate Element Entegrasyonu -->
+  <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+
   <style>
     :root {
       --bg-color: #0f172a;
@@ -49,7 +52,12 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; font-size: var(--font-size); }
-    body { background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; transition: background 0.3s; }
+    body { background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; transition: background 0.3s; top: 0 !important; }
+
+    /* Google Translate Gizleme/Düzenleme */
+    .goog-te-banner-frame { display: none !important; }
+    #google_translate_element { display: none; }
+    .skiptranslate { font-size: 0 !important; }
 
     /* AUTH EKRANI */
     #auth-screen { background: var(--card-bg); padding: 2.5rem 2rem; border-radius: 12px; border: 1px solid var(--border-color); width: 100%; max-width: 420px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); max-height: 95vh; overflow-y: auto; }
@@ -176,11 +184,82 @@
 </head>
 <body>
 
+  <!-- Gizli Google Translate Öğesi -->
+  <div id="google_translate_element"></div>
+
   <!-- AUTH EKRANI -->
   <div id="auth-screen">
     <div style="margin-bottom: 1.5rem;">
       <h2 id="auth-title" style="margin-bottom: 0.2rem; color: var(--accent-color);">🔒 Giriş Yap</h2>
       <p id="auth-subtitle" style="font-size: 0.8rem; color: var(--text-muted);">Uçtan uca güvenli mesajlaşma</p>
+    </div>
+
+    <!-- DİL SEÇİM MENÜSÜ (55 DİL) -->
+    <div style="margin-bottom: 0.8rem; text-align: left;">
+      <label style="font-size: 0.75rem; color: var(--text-muted); font-weight: bold;">🌐 Uygulama Dili / Language:</label>
+      <select id="auth-language-select" onchange="changeLanguage(this.value)" style="margin-top:4px;">
+        <option value="tr">🇹🇷 Türkçe (Turkish)</option>
+        <option value="en">🇺🇸 English</option>
+        <option value="de">🇩🇪 Deutsch (German)</option>
+        <option value="fr">🇫🇷 Français (French)</option>
+        <option value="es">🇪🇸 Español (Spanish)</option>
+        <option value="it">🇮🇹 Italiano (Italian)</option>
+        <option value="pt">🇵🇹 Português (Portuguese)</option>
+        <option value="ru">🇷🇺 Русский (Russian)</option>
+        <option value="ar">🇸🇦 العربية (Arabic)</option>
+        <option value="zh-CN">🇨🇳 中文 (Simplified Chinese)</option>
+        <option value="ja">🇯🇵 日本語 (Japanese)</option>
+        <option value="ko">🇰🇷 한국어 (Korean)</option>
+        <option value="nl">🇳🇱 Nederlands (Dutch)</option>
+        <option value="pl">🇵🇱 Polski (Polish)</option>
+        <option value="uk">🇺🇦 Українська (Ukrainian)</option>
+        <option value="el">🇬🇷 Ελληνικά (Greek)</option>
+        <option value="sv">🇸🇪 Svenska (Swedish)</option>
+        <option value="no">🇳🇴 Norsk (Norwegian)</option>
+        <option value="da">🇩🇰 Dansk (Danish)</option>
+        <option value="fi">🇫🇮 Suomi (Finnish)</option>
+        <option value="cs">🇨🇿 Čeština (Czech)</option>
+        <option value="ro">🇷🇴 Română (Romanian)</option>
+        <option value="hu">🇭🇺 Magyar (Hungarian)</option>
+        <option value="az">🇦🇿 Azərbaycanca (Azerbaijani)</option>
+        <option value="hi">🇮🇳 हिन्दी (Hindi)</option>
+        <option value="bn">🇧🇩 বাংলা (Bengali)</option>
+        <option value="id">🇮🇩 Bahasa Indonesia</option>
+        <option value="ms">🇲🇾 Bahasa Melayu</option>
+        <option value="th">🇹🇭 ไทย (Thai)</option>
+        <option value="vi">🇻🇳 Tiếng Việt (Vietnamese)</option>
+        <option value="fa">🇮🇷 فارسی (Persian)</option>
+        <option value="he">🇮🇱 עברית (Hebrew)</option>
+
+        <option value="sq">🇦🇱 Shqip (Albanian)</option>
+        <option value="bs">🇧🇦 Bosanski (Bosnian)</option>
+        <option value="bg">🇧🇬 Български (Bulgarian)</option>
+        <option value="hr">🇭🇷 Hrvatski (Croatian)</option>
+        <option value="et">🇪🇪 Eesti (Estonian)</option>
+        <option value="gl">🇪🇸 Galego (Galician)</option>
+        <option value="ka">🇬🇪 ქართული (Georgian)</option>
+        <option value="is">🇮🇸 Íslenska (Icelandic)</option>
+        <option value="ga">🇮🇪 Gaeilge (Irish)</option>
+        <option value="kk">🇰🇿 Қазақ тілі (Kazakh)</option>
+
+        <option value="lv">🇱🇻 Latviešu (Latvian)</option>
+        <option value="lt">🇱🇹 Lietuvių (Lithuanian)</option>
+
+        <option value="mk">🇲🇰 Македонски (Macedonian)</option>
+        <option value="mt">🇲🇹 Malti (Maltese)</option>
+        <option value="mn">🇲🇳 Монгол (Mongolian)</option>
+
+        <option value="sr">🇷🇸 Српски (Serbian)</option>
+        <option value="sk">🇸🇰 Slovenčina (Slovak)</option>
+
+        <option value="sl">🇸🇮 Slovenščina (Slovenian)</option>
+        <option value="sw">🇰🇪 Kiswahili (Swahili)</option>
+
+        <option value="fil">🇵🇭 Tagalog (Filipino)</option>
+
+        <option value="ur">🇵🇰 اردو (Urdu)</option>
+        <option value="uz">🇺🇿 O‘zbekcha (Uzbek)</option>
+      </select>
     </div>
 
     <input type="text" id="user-input" placeholder="Kullanıcı Adı (@username)" required autocomplete="off">
@@ -216,7 +295,68 @@
   <div id="settings-modal" class="modal">
     <div class="modal-content">
       <h3>⚙️ Ayarlar & Gizlilik</h3>
-      
+
+      <!-- MODAL İÇİ DİL SEÇENEĞİ -->
+      <div class="setting-group">
+        <label>🌐 Uygulama Dili / Language</label>
+        <select id="settings-language-select" onchange="changeLanguage(this.value)">
+          <option value="tr">🇹🇷 Türkçe (Turkish)</option>
+          <option value="en">🇺🇸 English</option>
+          <option value="de">🇩🇪 Deutsch (German)</option>
+          <option value="fr">🇫🇷 Français (French)</option>
+          <option value="es">🇪🇸 Español (Spanish)</option>
+          <option value="it">🇮🇹 Italiano (Italian)</option>
+          <option value="pt">🇵🇹 Português (Portuguese)</option>
+          <option value="ru">🇷🇺 Русский (Russian)</option>
+          <option value="ar">🇸🇦 العربية (Arabic)</option>
+          <option value="zh-CN">🇨🇳 中文 (Simplified Chinese)</option>
+          <option value="ja">🇯🇵 日本語 (Japanese)</option>
+          <option value="ko">🇰🇷 한국어 (Korean)</option>
+          <option value="nl">🇳🇱 Nederlands (Dutch)</option>
+          <option value="pl">🇵🇱 Polski (Polish)</option>
+          <option value="uk">🇺🇦 Українська (Ukrainian)</option>
+          <option value="el">🇬🇷 Ελληνικά (Greek)</option>
+          <option value="sv">🇸🇪 Svenska (Swedish)</option>
+          <option value="no">🇳🇴 Norsk (Norwegian)</option>
+          <option value="da">🇩🇰 Dansk (Danish)</option>
+          <option value="fi">🇫🇮 Suomi (Finnish)</option>
+          <option value="cs">🇨🇿 Čeština (Czech)</option>
+          <option value="ro">🇷🇴 Română (Romanian)</option>
+          <option value="hu">🇭🇺 Magyar (Hungarian)</option>
+          <option value="az">🇦🇿 Azərbaycanca (Azerbaijani)</option>
+          <option value="hi">🇮🇳 हिन्दी (Hindi)</option>
+          <option value="bn">🇧🇩 বাংলা (Bengali)</option>
+          <option value="id">🇮🇩 Bahasa Indonesia</option>
+          <option value="ms">🇲🇾 Bahasa Melayu</option>
+          <option value="th">🇹🇭 ไทย (Thai)</option>
+          <option value="vi">🇻🇳 Tiếng Việt (Vietnamese)</option>
+          <option value="fa">🇮🇷 فارسی (Persian)</option>
+          <option value="he">🇮🇱 עברית (Hebrew)</option>
+          <option value="sq">🇦🇱 Shqip (Albanian)</option>
+          <option value="bs">🇧🇦 Bosanski (Bosnian)</option>
+          <option value="bg">🇧🇬 Български (Bulgarian)</option>
+          <option value="hr">🇭🇷 Hrvatski (Croatian)</option>
+          <option value="et">🇪🇪 Eesti (Estonian)</option>
+          <option value="gl">🇪🇸 Galego (Galician)</option>
+          <option value="ka">🇬🇪 ქართული (Georgian)</option>
+          <option value="is">🇮🇸 Íslenska (Icelandic)</option>
+          <option value="ga">🇮🇪 Gaeilge (Irish)</option>
+          <option value="kk">🇰🇿 Қазақ тілі (Kazakh)</option>
+          <option value="lv">🇱🇻 Latviešu (Latvian)</option>
+          <option value="lt">🇱🇹 Lietuvių (Lithuanian)</option>
+          <option value="mk">🇲🇰 Македонски (Macedonian)</option>
+          <option value="mt">🇲🇹 Malti (Maltese)</option>
+          <option value="mn">🇲🇳 Монгол (Mongolian)</option>
+          <option value="sr">🇷🇸 Српски (Serbian)</option>
+          <option value="sk">🇸🇰 Slovenčina (Slovak)</option>
+          <option value="sl">🇸🇮 Slovenščina (Slovenian)</option>
+          <option value="sw">🇰🇪 Kiswahili (Swahili)</option>
+          <option value="fil">🇵🇭 Tagalog (Filipino)</option>
+          <option value="ur">🇵🇰 اردو (Urdu)</option>
+          <option value="uz">🇺🇿 O‘zbekcha (Uzbek)</option>
+        </select>
+      </div>
+
       <div class="setting-group">
         <label>🖼️ Profil Resmini Değiştir</label>
         <input type="file" id="settings-avatar-file" accept="image/*" class="file-input-custom" onchange="saveAvatarFromFile(event)">
@@ -516,6 +656,34 @@
   </div>
 
   <script>
+    /* GOOGLE TRANSLATE ÇEVİRİ MOTORU İNİTİALİZE */
+    function googleTranslateElementInit() {
+      new google.translate.TranslateElement({
+        pageLanguage: 'tr',
+        autoDisplay: false
+      }, 'google_translate_element');
+    }
+
+    function changeLanguage(langCode) {
+      if (!langCode) return;
+      
+      // Selectbox senkronizasyonu
+      const authSel = document.getElementById('auth-language-select');
+      const setSel = document.getElementById('settings-language-select');
+      if (authSel) authSel.value = langCode;
+      if (setSel) setSel.value = langCode;
+
+      // Google Translate Element tetikleme
+      const translateElem = document.querySelector('.goog-te-combo');
+      if (translateElem) {
+        translateElem.value = langCode;
+        translateElem.dispatchEvent(new Event('change'));
+      } else {
+        setTimeout(() => changeLanguage(langCode), 500);
+      }
+      localStorage.setItem('chat_app_lang', langCode);
+    }
+
     // FIREBASE INITIALIZATION
     const firebaseConfig = {
       apiKey: "AIzaSyDlcX-v_ebwy1YGVrKz0PjkNTGdrqzmT1s",
@@ -1417,6 +1585,14 @@
       const picker = document.getElementById('emoji-picker');
       if (e.target !== picker && !picker.contains(e.target) && e.target.textContent !== '😀') {
         picker.style.display = 'none';
+      }
+    });
+
+    // Kaydedilmiş dili yükleme
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedLang = localStorage.getItem('chat_app_lang');
+      if (savedLang) {
+        setTimeout(() => changeLanguage(savedLang), 1000);
       }
     });
 
