@@ -9,6 +9,10 @@
   <link rel="apple-touch-icon" href="alim_yekta_under_10kb.png">
   <link rel="manifest" href='data:application/manifest+json,{"name":"Alim Yekta Chat","short_name":"Chat","start_url":"./index.html","display":"standalone","background_color":"#0f172a","theme_color":"#6366f1","icons":[{"src":"alim_yekta_under_10kb.png","sizes":"192x192","type":"image/png"}]}'>
 
+  <!-- Firebase SDK (Gerekli Altyapı) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
   <style>
     :root {
       --bg-color: #0f172a;
@@ -356,25 +360,39 @@
   </div>
 
   <script>
+    // FIREBASE YAPILANDIRMASI (Senin Projen)
+    const firebaseConfig = {
+      apiKey: "AIzaSyDlcX-v_ebwy1YGVrKz0PjkNTGdrqzmT1s",
+      authDomain: "alim-yekta-chat-f2b37.firebaseapp.com",
+      databaseURL: "https://alim-yekta-chat-f2b37-default-rtdb.firebaseio.com",
+      projectId: "alim-yekta-chat-f2b37",
+      storageBucket: "alim-yekta-chat-f2b37.firebasestorage.app",
+      messagingSenderId: "792256205104",
+      appId: "1:792256205104:web:39664073407ef0dce438f5"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
     let soundEnabled = true;
     let isLoginMode = true;
     let currentUser = "";
     let activeTarget = "global";
     let localStream = null;
     let typingTimeout;
-    let selectedAvatarBase64 = ""; // Kayıt esnasında seçilen resmi tutar
+    let selectedAvatarBase64 = "";
 
-    // LOCAL STORAGE VERİLERİ
-    let users = JSON.parse(localStorage.getItem('chat_users')) || {};
-    let messages = JSON.parse(localStorage.getItem('chat_messages')) || [];
-    let friends = JSON.parse(localStorage.getItem('chat_friends')) || {};
-    let blockedUsers = JSON.parse(localStorage.getItem('chat_blocked')) || {};
-    let groups = JSON.parse(localStorage.getItem('chat_groups')) || {};
-    let communities = JSON.parse(localStorage.getItem('chat_communities')) || {};
-    let avatars = JSON.parse(localStorage.getItem('chat_avatars')) || {};
-    let requests = JSON.parse(localStorage.getItem('chat_requests')) || {}; 
-    let privacy = JSON.parse(localStorage.getItem('chat_privacy')) || {}; 
-    let lastSeen = JSON.parse(localStorage.getItem('chat_lastseen')) || {};
+    // DEĞİŞKENLER (Firebase Veri Depoları)
+    let users = {};
+    let messages = [];
+    let friends = {};
+    let blockedUsers = {};
+    let groups = {};
+    let communities = {};
+    let avatars = {};
+    let requests = {}; 
+    let privacy = {}; 
+    let lastSeen = {};
 
     let mediaRecorder;
     let audioChunks = [];
@@ -382,6 +400,29 @@
     let isVoiceRoomActive = false;
 
     const emojis = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "👍", "👎", "👏", "🙌", "👐", "🤲", "🤝", "🙏", "❤️", "🔥"];
+
+    // GERÇEK ZAMANLI VERİ DİNLEYİCİLERİ (FIREBASE)
+    function setupFirebaseListeners() {
+      db.ref('users').on('value', snap => { users = snap.val() || {}; });
+      db.ref('friends').on('value', snap => { friends = snap.val() || {}; renderFriendsList(); });
+      db.ref('groups').on('value', snap => { groups = snap.val() || {}; renderGroupsList(); });
+      db.ref('communities').on('value', snap => { communities = snap.val() || {}; renderCommunitiesList(); });
+      db.ref('avatars').on('value', snap => { avatars = snap.val() || {}; updateAvatarDisplay(); renderFriendsList(); });
+      db.ref('requests').on('value', snap => { requests = snap.val() || {}; updateBadge(); });
+      db.ref('privacy').on('value', snap => { privacy = snap.val() || {}; });
+      db.ref('lastseen').on('value', snap => { lastSeen = snap.val() || {}; renderFriendsList(); });
+
+      // Anlık Mesaj Dinleyicisi
+      db.ref('messages').on('value', snap => {
+        const val = snap.val() || {};
+        const oldLength = messages.length;
+        messages = Object.values(val);
+        renderCurrentMessages();
+        if (messages.length > oldLength && oldLength !== 0) {
+          triggerNotification("Yeni Mesaj!");
+        }
+      });
+    }
 
     function triggerNotification(msg) {
       if ("Notification" in window && Notification.permission === "granted") {
@@ -412,10 +453,7 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function(evt) {
-        avatars[currentUser] = evt.target.result;
-        localStorage.setItem('chat_avatars', JSON.stringify(avatars));
-        updateAvatarDisplay();
-        renderFriendsList();
+        db.ref('avatars/' + currentUser).set(evt.target.result);
         alert("Profil resminiz başarıyla değiştirildi!");
       };
       reader.readAsDataURL(file);
@@ -464,63 +502,50 @@
       if (!user || !pass) return alert("Lütfen kullanıcı adı ve şifre giriniz!");
       
       if (isLoginMode) {
-        let isMatch = false;
-        if (typeof users[user] === 'string') {
-            isMatch = (users[user] === pass);
-        } else if (users[user] && users[user].password === pass) {
-            isMatch = true;
-        }
-
-        if (isMatch) {
-          startChat(user);
-          if ("Notification" in window) Notification.requestPermission();
-        } else {
-          alert("❌ Hatalı kullanıcı adı veya şifre!");
-        }
+        db.ref('users/' + user).once('value', snapshot => {
+          const userData = snapshot.val();
+          if (userData && userData.password === pass) {
+            startChat(user);
+            if ("Notification" in window) Notification.requestPermission();
+          } else {
+            alert("❌ Hatalı kullanıcı adı veya şifre!");
+          }
+        });
       } else {
         const email = document.getElementById('email-input').value.trim();
         
-        // Katı Doğrulama Kuralları
         if (!email.includes('@') || !email.includes('.')) return alert("Geçerli bir E-posta adresi giriniz!");
-        if (pass.length < 8) return alert("Şifre en az 8 karakter olmalıdır (Ultra Koruma Kuralları)!");
+        if (pass.length < 8) return alert("Şifre en az 8 karakter olmalıdır!");
         if (!/[A-Z]/.test(pass) || !/[0-9]/.test(pass)) return alert("Şifreniz en az bir BÜYÜK HARF ve bir RAKAM içermelidir!");
         
-        if (users[user]) return alert("Bu kullanıcı adı zaten alınmış!");
-        
-        users[user] = { password: pass, email: email, registeredAt: Date.now() };
-        localStorage.setItem('chat_users', JSON.stringify(users));
-        
-        if (selectedAvatarBase64) {
-          avatars[user] = selectedAvatarBase64;
-          localStorage.setItem('chat_avatars', JSON.stringify(avatars));
-        }
-        
-        alert("✅ Kayıt başarılı! Hesabınız güvenle oluşturuldu. Şimdi giriş yapabilirsiniz.");
-        toggleMode();
+        db.ref('users/' + user).once('value', snapshot => {
+          if (snapshot.exists()) {
+            alert("Bu kullanıcı adı zaten alınmış!");
+          } else {
+            db.ref('users/' + user).set({ password: pass, email: email, registeredAt: Date.now() });
+            if (selectedAvatarBase64) {
+              db.ref('avatars/' + user).set(selectedAvatarBase64);
+            }
+            alert("✅ Kayıt başarılı! Şimdi giriş yapabilirsiniz.");
+            toggleMode();
+          }
+        });
       }
     }
 
     function startChat(username) {
       currentUser = username;
-      lastSeen[currentUser] = "Çevrimiçi";
-      localStorage.setItem('chat_lastseen', JSON.stringify(lastSeen));
+      db.ref('lastseen/' + currentUser).set("Çevrimiçi");
 
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('chat-app').style.display = 'flex';
       document.getElementById('current-user-display').textContent = currentUser;
       
-      loadPrivacySettings();
-      updateAvatarDisplay();
+      setupFirebaseListeners();
       initEmojiPicker();
-      renderFriendsList();
-      renderGroupsList();
-      renderCommunitiesList();
-      updateBadge();
-      renderCurrentMessages();
 
       window.addEventListener('beforeunload', () => {
-        lastSeen[currentUser] = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        localStorage.setItem('chat_lastseen', JSON.stringify(lastSeen));
+        db.ref('lastseen/' + currentUser).set(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       });
     }
 
@@ -531,19 +556,18 @@
       if (!friendName || friendName === currentUser) return alert("Geçersiz kullanıcı adı!");
       if (!users[friendName]) return alert("Böyle bir kullanıcı sistemde yok!");
       
-      if (!requests[friendName]) requests[friendName] = [];
-      if (requests[friendName].some(r => r.from === currentUser && r.type === 'friend')) {
+      const userReqs = requests[friendName] || [];
+      if (userReqs.some(r => r.from === currentUser && r.type === 'friend')) {
         return alert("Zaten istek gönderilmiş!");
       }
 
-      requests[friendName].push({ from: currentUser, type: 'friend', id: Date.now() });
-      localStorage.setItem('chat_requests', JSON.stringify(requests));
+      db.ref(`requests/${friendName}`).push({ from: currentUser, type: 'friend', id: Date.now() });
       alert("Arkadaşlık isteği gönderildi!");
       friendInput.value = '';
     }
 
     function updateBadge() {
-      const myReqs = requests[currentUser] || [];
+      const myReqs = requests[currentUser] ? Object.values(requests[currentUser]) : [];
       const badge = document.getElementById('req-badge');
       if (myReqs.length > 0) {
         badge.textContent = myReqs.length;
@@ -557,19 +581,20 @@
       const modal = document.getElementById('requests-modal');
       const list = document.getElementById('requests-list');
       list.innerHTML = '';
-      const myReqs = requests[currentUser] || [];
+      const rawReqs = requests[currentUser] || {};
+      const myReqs = Object.entries(rawReqs);
 
       if (myReqs.length === 0) {
         list.innerHTML = '<p style="font-size:0.85rem; color:var(--text-muted); text-align:center;">Hiç gelen istek yok.</p>';
       } else {
-        myReqs.forEach(req => {
+        myReqs.forEach(([key, req]) => {
           const div = document.createElement('div');
           div.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:8px; background:var(--bg-color); border-radius:8px;";
           div.innerHTML = `
             <span style="font-size:0.85rem;"><strong>${req.from}</strong> size ${req.type === 'friend' ? 'arkadaşlık' : 'grup'} isteği gönderdi.</span>
             <div>
-              <button onclick="acceptRequest(${req.id})" style="background:var(--success-color); padding:4px 8px; font-size:0.75rem; border:none; border-radius:4px; color:white; cursor:pointer;">Kabul</button>
-              <button onclick="rejectRequest(${req.id})" style="background:var(--danger-color); padding:4px 8px; font-size:0.75rem; border:none; border-radius:4px; color:white; cursor:pointer;">Reddet</button>
+              <button onclick="acceptRequest('${key}', '${req.from}', '${req.type}', '${req.groupId || ''}')" style="background:var(--success-color); padding:4px 8px; font-size:0.75rem; border:none; border-radius:4px; color:white; cursor:pointer;">Kabul</button>
+              <button onclick="rejectRequest('${key}')" style="background:var(--danger-color); padding:4px 8px; font-size:0.75rem; border:none; border-radius:4px; color:white; cursor:pointer;">Reddet</button>
             </div>
           `;
           list.appendChild(div);
@@ -580,39 +605,22 @@
     
     function closeRequests() { document.getElementById('requests-modal').style.display = 'none'; }
 
-    function acceptRequest(reqId) {
-      const myReqs = requests[currentUser];
-      const reqIndex = myReqs.findIndex(r => r.id === reqId);
-      if (reqIndex > -1) {
-        const req = myReqs[reqIndex];
-        if (req.type === 'friend') {
-          if(!friends[currentUser]) friends[currentUser] = [];
-          if(!friends[req.from]) friends[req.from] = [];
-          if(!friends[currentUser].includes(req.from)) friends[currentUser].push(req.from);
-          if(!friends[req.from].includes(currentUser)) friends[req.from].push(currentUser);
-          localStorage.setItem('chat_friends', JSON.stringify(friends));
-          renderFriendsList();
-          alert("Arkadaş olarak eklendi!");
-        } else if (req.type === 'group') {
-          if (!groups[req.groupId].members.includes(currentUser)) {
-             groups[req.groupId].members.push(currentUser);
-             localStorage.setItem('chat_groups', JSON.stringify(groups));
-             renderGroupsList();
-             alert("Gruba katıldınız!");
-          }
-        }
-        myReqs.splice(reqIndex, 1);
-        localStorage.setItem('chat_requests', JSON.stringify(requests));
-        openRequests();
-        updateBadge();
+    function acceptRequest(key, fromUser, type, groupId) {
+      if (type === 'friend') {
+        db.ref(`friends/${currentUser}/${fromUser}`).set(true);
+        db.ref(`friends/${fromUser}/${currentUser}`).set(true);
+        alert("Arkadaş olarak eklendi!");
+      } else if (type === 'group' && groupId) {
+        db.ref(`groups/${groupId}/members`).push(currentUser);
+        alert("Gruba katıldınız!");
       }
+      db.ref(`requests/${currentUser}/${key}`).remove();
+      openRequests();
     }
 
-    function rejectRequest(reqId) {
-      requests[currentUser] = requests[currentUser].filter(r => r.id !== reqId);
-      localStorage.setItem('chat_requests', JSON.stringify(requests));
+    function rejectRequest(key) {
+      db.ref(`requests/${currentUser}/${key}`).remove();
       openRequests();
-      updateBadge();
     }
 
     /* GRUP & TOPLULUK FONKSİYONLARI */
@@ -620,10 +628,8 @@
       const gName = document.getElementById('group-name-input').value.trim();
       if (!gName) return alert("Grup adı girin!");
       const gId = "group_" + Date.now();
-      groups[gId] = { name: gName, admin: currentUser, members: [currentUser] };
-      localStorage.setItem('chat_groups', JSON.stringify(groups));
+      db.ref(`groups/${gId}`).set({ name: gName, admin: currentUser, members: [currentUser] });
       document.getElementById('group-name-input').value = "";
-      renderGroupsList();
       alert("Grup kuruldu!");
     }
 
@@ -631,38 +637,28 @@
       const cName = document.getElementById('group-name-input').value.trim();
       if (!cName) return alert("Topluluk adı girin!");
       const cId = "comm_" + Date.now();
-      communities[cId] = { name: cName, admin: currentUser, subscribers: [currentUser] };
-      localStorage.setItem('chat_communities', JSON.stringify(communities));
+      db.ref(`communities/${cId}`).set({ name: cName, admin: currentUser, subscribers: [currentUser] });
       document.getElementById('group-name-input').value = "";
-      renderCommunitiesList();
       alert("Topluluk (Duyuru Kanalı) kuruldu!");
     }
 
     function inviteToGroup(gId) {
       const target = prompt("Gruba davet edilecek kullanıcı adı:");
       if(!target || !users[target]) return alert("Geçersiz kullanıcı");
-      if(!requests[target]) requests[target] = [];
-      requests[target].push({ from: currentUser, type: 'group', groupId: gId, id: Date.now() });
-      localStorage.setItem('chat_requests', JSON.stringify(requests));
+      db.ref(`requests/${target}`).push({ from: currentUser, type: 'group', groupId: gId, id: Date.now() });
       alert("Davet gönderildi!");
     }
 
     function subscribeCommunity(cId) {
-      if(!communities[cId].subscribers.includes(currentUser)) {
-        communities[cId].subscribers.push(currentUser);
-        localStorage.setItem('chat_communities', JSON.stringify(communities));
-        alert("Topluluğa katıldınız!");
-      }
+      db.ref(`communities/${cId}/subscribers`).push(currentUser);
+      alert("Topluluğa katıldınız!");
     }
 
     /* ENGELLEME */
     function blockUser(username) {
       if(confirm(username + " adlı kullanıcıyı engellemek istiyor musunuz?")) {
-        if(!blockedUsers[currentUser]) blockedUsers[currentUser] = [];
-        blockedUsers[currentUser].push(username);
-        localStorage.setItem('chat_blocked', JSON.stringify(blockedUsers));
+        db.ref(`blocked/${currentUser}/${username}`).set(true);
         alert("Kullanıcı engellendi.");
-        renderFriendsList();
         if(activeTarget === username) switchChat('global', 'Genel Oda');
       }
     }
@@ -678,10 +674,8 @@
       const list = document.getElementById('friends-list');
       list.innerHTML = '';
       if(!friends[currentUser]) return;
-      const myBlocks = blockedUsers[currentUser] || [];
 
-      friends[currentUser].forEach(friend => {
-        if(myBlocks.includes(friend)) return; 
+      Object.keys(friends[currentUser]).forEach(friend => {
         const status = lastSeen[friend] === "Çevrimiçi" ? '<div class="online-indicator"></div>' : '';
         const item = document.createElement('div');
         item.className = 'chat-item';
@@ -704,7 +698,8 @@
       const list = document.getElementById('groups-list');
       list.innerHTML = '';
       Object.keys(groups).forEach(gId => {
-        if (groups[gId].members.includes(currentUser)) {
+        const groupMembers = Object.values(groups[gId].members || {});
+        if (groupMembers.includes(currentUser)) {
           const item = document.createElement('div');
           item.className = 'chat-item';
           item.id = 'item-' + gId;
@@ -728,10 +723,11 @@
         item.className = 'chat-item';
         item.id = 'item-' + cId;
         item.onclick = () => switchChat(cId, communities[cId].name, 'community');
+        const subs = Object.values(communities[cId].subscribers || {});
         item.innerHTML = `
           <span>📢 ${communities[cId].name}</span>
           <div class="chat-item-actions">
-            ${!communities[cId].subscribers.includes(currentUser) ? `<button class="icon-btn" title="Katıl" onclick="event.stopPropagation(); subscribeCommunity('${cId}')">✔️</button>` : ''}
+            ${!subs.includes(currentUser) ? `<button class="icon-btn" title="Katıl" onclick="event.stopPropagation(); subscribeCommunity('${cId}')">✔️</button>` : ''}
           </div>
         `;
         list.appendChild(item);
@@ -756,7 +752,7 @@
       document.getElementById('active-chat-status').textContent = type === 'community' ? 'Duyuru Kanalı' : (type === 'group' ? 'Grup Sohbeti' : getPrivacyStatus(target));
       
       const form = document.getElementById('chat-form');
-      if (type === 'community' && communities[target].admin !== currentUser) {
+      if (type === 'community' && communities[target] && communities[target].admin !== currentUser) {
         form.style.display = 'none';
       } else {
         form.style.display = 'flex';
@@ -783,13 +779,7 @@
       e.preventDefault();
       const input = document.getElementById('message-input');
       const text = input.value.trim();
-      
       if (!text) return;
-
-      const myBlocks = blockedUsers[currentUser] || [];
-      if (myBlocks.includes(activeTarget)) return alert("Bu kullanıcıyı engellediniz.");
-      const theirBlocks = blockedUsers[activeTarget] || [];
-      if (theirBlocks.includes(currentUser)) return alert("Bu kullanıcı tarafından engellendiniz.");
 
       const newMsg = {
         sender: currentUser,
@@ -797,15 +787,11 @@
         text: text,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         type: 'text',
-        isRead: false
+        timestamp: Date.now()
       };
 
-      messages.push(newMsg);
-      localStorage.setItem('chat_messages', JSON.stringify(messages));
+      db.ref('messages').push(newMsg);
       input.value = '';
-      
-      renderCurrentMessages();
-      triggerNotification("Mesaj gönderildi");
     }
 
     function sendLocation() {
@@ -818,11 +804,9 @@
           text: `<a href="${link}" target="_blank" class="location-link">📍 Konumumu Gör</a>`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           type: 'html',
-          isRead: false
+          timestamp: Date.now()
         };
-        messages.push(newMsg);
-        localStorage.setItem('chat_messages', JSON.stringify(messages));
-        renderCurrentMessages();
+        db.ref('messages').push(newMsg);
       });
     }
 
@@ -837,11 +821,9 @@
           text: file.type.startsWith('image/') ? `<img src="${evt.target.result}" style="max-width:100%; border-radius:8px;">` : `📁 Dosya Gönderildi`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           type: 'html',
-          isRead: false
+          timestamp: Date.now()
         };
-        messages.push(newMsg);
-        localStorage.setItem('chat_messages', JSON.stringify(messages));
-        renderCurrentMessages();
+        db.ref('messages').push(newMsg);
       };
       reader.readAsDataURL(file);
     }
@@ -866,18 +848,19 @@
 
           mediaRecorder.addEventListener("stop", () => {
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const newMsg = {
-              sender: currentUser,
-              target: activeTarget,
-              text: `<audio controls src="${audioUrl}"></audio>`,
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              type: 'html',
-              isRead: false
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const newMsg = {
+                sender: currentUser,
+                target: activeTarget,
+                text: `<audio controls src="${reader.result}"></audio>`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                type: 'html',
+                timestamp: Date.now()
+              };
+              db.ref('messages').push(newMsg);
             };
-            messages.push(newMsg);
-            localStorage.setItem('chat_messages', JSON.stringify(messages));
-            renderCurrentMessages();
+            reader.readAsDataURL(audioBlob);
           });
 
           btn.classList.add('recording');
@@ -902,40 +885,23 @@
         }
       });
 
-      let needsUpdate = false;
-      
       filtered.forEach(msg => {
         const isSent = msg.sender === currentUser;
-        
-        if (!isSent && !msg.isRead && !activeTarget.startsWith('group_') && activeTarget !== 'global') {
-          msg.isRead = true;
-          needsUpdate = true;
-        }
-
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${isSent ? 'sent' : 'received'}`;
         
         let contentHTML = msg.type === 'text' ? 
            msg.text.replace(/</g, "&lt;").replace(/>/g, "&gt;") : msg.text;
 
-        let readHtml = "";
-        if (isSent && (activeTarget !== 'global' && !activeTarget.startsWith('group_') && !activeTarget.startsWith('comm_'))) {
-           if (canSeeReadReceipts(activeTarget)) {
-              readHtml = msg.isRead ? '<span class="read-status">✓✓</span>' : '<span>✓</span>';
-           }
-        }
-
         msgDiv.innerHTML = `
           ${!isSent ? `<div class="sender">${msg.sender}</div>` : ''}
           <div>${contentHTML}</div>
           <div class="message-meta">
-            ${msg.time} ${readHtml}
+            ${msg.time}
           </div>
         `;
         container.appendChild(msgDiv);
       });
-
-      if(needsUpdate) localStorage.setItem('chat_messages', JSON.stringify(messages));
 
       container.scrollTop = container.scrollHeight;
     }
@@ -1007,15 +973,13 @@
     function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; }
 
     function savePrivacySettings() {
-      if(!privacy[currentUser]) privacy[currentUser] = {};
-      privacy[currentUser].lastseen = document.getElementById('privacy-lastseen').value;
-      privacy[currentUser].read = document.getElementById('privacy-read').value;
-      localStorage.setItem('chat_privacy', JSON.stringify(privacy));
+      db.ref('privacy/' + currentUser).set({
+        lastseen: document.getElementById('privacy-lastseen').value,
+        read: document.getElementById('privacy-read').value
+      });
     }
 
-    function toggleTheme() {
-      document.body.classList.toggle('light-theme');
-    }
+    function toggleTheme() { document.body.classList.toggle('light-theme'); }
 
     function toggleSoundSetting() {
       soundEnabled = !soundEnabled;
@@ -1042,7 +1006,6 @@
 
     function resetApp() {
       if(confirm("Tüm veriler silinecek ve çıkış yapılacak. Emin misin?")) {
-        localStorage.clear();
         location.reload();
       }
     }
@@ -1050,6 +1013,7 @@
     /* EMOJI PICKER */
     function initEmojiPicker() {
       const picker = document.getElementById('emoji-picker');
+      picker.innerHTML = '';
       emojis.forEach(em => {
         const span = document.createElement('span');
         span.className = 'emoji-item';
@@ -1074,22 +1038,6 @@
         picker.style.display = 'none';
       }
     });
-
-    // Otomatik Yenileme
-    setInterval(() => {
-      if (currentUser) {
-        const newMsgLength = JSON.parse(localStorage.getItem('chat_messages') || '[]').length;
-        if (newMsgLength > messages.length) {
-          messages = JSON.parse(localStorage.getItem('chat_messages') || '[]');
-          renderCurrentMessages();
-          triggerNotification("Yeni mesaj geldi!");
-        }
-        requests = JSON.parse(localStorage.getItem('chat_requests')) || {};
-        updateBadge();
-      }
-    }, 2000);
-
   </script>
 </body>
 </html>
-     
