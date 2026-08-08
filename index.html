@@ -261,6 +261,58 @@
 </head>
 <body>
 
+  <!-- 🐞 EKRAN ÜZERİ HATA KONSOLU (Debug Console) - Tarayıcı geliştirici araçları olmadan hataları görmek için -->
+  <script>
+    (function() {
+      window.__debugLogs = [];
+      function pushLog(type, msg) {
+        window.__debugLogs.push({type: type, msg: msg, time: new Date().toLocaleTimeString()});
+        renderDebugConsole();
+      }
+      window.addEventListener('error', function(e) {
+        pushLog('HATA', (e.message || 'Bilinmeyen hata') + ' — ' + (e.filename ? e.filename.split('/').pop() : '') + ':' + e.lineno);
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        pushLog('PROMISE HATASI', (e.reason && e.reason.message) ? e.reason.message : String(e.reason));
+      });
+      window.debugLog = function(msg) { pushLog('BİLGİ', msg); };
+      const origConsoleError = console.error;
+      console.error = function() {
+        pushLog('CONSOLE.ERROR', Array.from(arguments).map(String).join(' '));
+        origConsoleError.apply(console, arguments);
+      };
+
+      function renderDebugConsole() {
+        const box = document.getElementById('debug-console-body');
+        const badge = document.getElementById('debug-console-badge');
+        if (!box) return;
+        box.innerHTML = window.__debugLogs.map(l =>
+          '<div style="padding:4px 0;border-bottom:1px solid #333;color:' + (l.type === 'HATA' || l.type === 'PROMISE HATASI' ? '#ff6b6b' : '#94a3b8') + ';">' +
+          '<b>[' + l.time + '] ' + l.type + ':</b> ' + l.msg.replace(/</g,'&lt;') + '</div>'
+        ).join('') || '<div style="color:#94a3b8;">Henüz hata yok.</div>';
+        if (badge) {
+          const errCount = window.__debugLogs.filter(l => l.type === 'HATA' || l.type === 'PROMISE HATASI').length;
+          badge.style.display = errCount > 0 ? 'inline-block' : 'none';
+          badge.textContent = errCount;
+        }
+      }
+      window.__renderDebugConsole = renderDebugConsole;
+    })();
+  </script>
+  <div id="debug-console-toggle" style="position:fixed; bottom:10px; right:10px; z-index:99999; background:#1e293b; color:#fff; border:1px solid #475569; border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:1.3rem; box-shadow:0 2px 8px rgba(0,0,0,0.5);" onclick="document.getElementById('debug-console-panel').style.display = document.getElementById('debug-console-panel').style.display==='block'?'none':'block'; window.__renderDebugConsole && window.__renderDebugConsole();">
+    🐞<span id="debug-console-badge" style="display:none; position:absolute; top:-4px; right:-4px; background:#ef4444; color:#fff; font-size:0.65rem; padding:1px 5px; border-radius:8px;">0</span>
+  </div>
+  <div id="debug-console-panel" style="display:none; position:fixed; bottom:60px; right:10px; left:10px; max-width:500px; margin-left:auto; z-index:99999; background:#0f172a; border:1px solid #475569; border-radius:10px; padding:10px; max-height:50vh; overflow-y:auto; font-family:monospace; font-size:0.72rem; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <strong style="color:#fff;">🐞 Hata Konsolu</strong>
+      <div>
+        <button style="font-size:0.65rem; padding:3px 8px;" onclick="window.__debugLogs=[]; window.__renderDebugConsole();">Temizle</button>
+        <button style="font-size:0.65rem; padding:3px 8px;" onclick="document.getElementById('debug-console-panel').style.display='none';">Kapat</button>
+      </div>
+    </div>
+    <div id="debug-console-body"></div>
+  </div>
+
   <!-- Gizli Google Translate Öğesi -->
   <div id="google_translate_element"></div>
 
@@ -432,6 +484,18 @@
       <div class="setting-group">
         <label>🎨 Tema Tercihi</label>
         <button class="btn-block btn-secondary" onclick="toggleTheme()">Karanlık / Aydınlık Mod</button>
+      </div>
+
+      <div class="setting-group">
+        <label>🔠 Yazı Boyutu</label>
+        <input type="range" id="font-size-slider" min="11" max="20" value="14" oninput="applyFontSize(this.value)">
+        <span id="font-size-value" style="font-size:0.75rem; color:var(--text-muted);">14px</span>
+      </div>
+
+      <div class="setting-group">
+        <label>🖼️ Sohbet Duvar Kağıdı Rengi</label>
+        <input type="color" id="wallpaper-color-input" value="#0f172a" onchange="applyWallpaper(this.value)" style="width:60px; height:36px; padding:0; border:none; cursor:pointer;">
+        <button style="font-size:0.7rem; padding:6px 10px; margin-left:6px;" onclick="resetWallpaper()">Sıfırla</button>
       </div>
 
       <div class="setting-group">
@@ -725,6 +789,43 @@
     </div>
   </div>
 
+  <!-- TOPLU MESAJ (BROADCAST) MODALI -->
+  <div id="broadcast-modal" class="modal">
+    <div class="modal-content">
+      <h3>📢 Toplu Mesaj Gönder</h3>
+      <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:8px;">Seçtiğin arkadaşlara aynı mesaj ayrı ayrı özel mesaj olarak gönderilir.</p>
+      <div id="broadcast-friend-list" style="max-height:200px; overflow-y:auto; margin-bottom:10px;"></div>
+      <textarea id="broadcast-message-text" placeholder="Mesajınızı yazın..." style="width:100%; height:80px; padding:8px; border-radius:6px; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border-color);"></textarea>
+      <button class="btn-block btn-primary" onclick="sendBroadcast()">Gönder</button>
+      <button class="btn-block btn-secondary" onclick="closeModal('broadcast-modal')">İptal</button>
+    </div>
+  </div>
+
+  <!-- SOHBETTE ARAMA MODALI -->
+  <div id="search-in-chat-modal" class="modal">
+    <div class="modal-content">
+      <h3>🔎 Bu Sohbette Ara</h3>
+      <input type="text" id="search-in-chat-input" placeholder="Aranacak kelime..." oninput="searchInChat()">
+      <div id="search-in-chat-results" style="max-height:280px; overflow-y:auto; margin-top:10px;"></div>
+      <button class="btn-block btn-secondary" onclick="closeModal('search-in-chat-modal')">Kapat</button>
+    </div>
+  </div>
+
+  <!-- KİŞİ / SOHBET BİLGİ MODALI -->
+  <div id="contact-info-modal" class="modal">
+    <div class="modal-content" style="text-align:center;">
+      <div id="contact-info-avatar" style="width:80px; height:80px; border-radius:50%; margin:0 auto 12px auto; background:var(--accent-color); display:flex; align-items:center; justify-content:center; font-size:2rem; color:#fff; overflow:hidden;"></div>
+      <h3 id="contact-info-name">@kullanıcı</h3>
+      <p id="contact-info-lastseen" style="font-size:0.8rem; color:var(--text-muted); margin-bottom:14px;"></p>
+      <div style="display:flex; flex-direction:column; gap:8px; text-align:left;">
+        <button class="btn-block btn-secondary" id="contact-mute-btn" onclick="toggleMuteChat()">🔔 Sessize Al</button>
+        <button class="btn-block btn-secondary" id="contact-archive-btn" onclick="toggleArchiveChat()">📦 Arşivle</button>
+        <button class="btn-block btn-danger" id="contact-block-btn" onclick="blockFromContactInfo()">🚫 Engelle</button>
+      </div>
+      <button class="btn-block btn-secondary" onclick="closeModal('contact-info-modal')" style="margin-top:14px;">Kapat</button>
+    </div>
+  </div>
+
   <!-- ANA UYGULAMA -->
   <div id="chat-app">
     <div class="sidebar">
@@ -784,6 +885,7 @@
         <div class="chat-item active" id="item-global" onclick="switchChat('global', 'Genel Oda')"><span>🌐 Genel Oda</span></div>
         <div class="chat-item" id="item-aya_ai" onclick="switchChat('aya_ai', '🤖 AYA AI Asistanı')"><span>🤖 AYA AI Asistanı</span></div>
         <div class="chat-item" id="item-saved" onclick="switchChat('saved_messages', '📌 Kaydedilen Mesajlar')"><span>📌 Kaydedilenler</span></div>
+        <div class="chat-item" id="item-starred" onclick="switchChat('starred_messages', '⭐ Yıldızlı Mesajlar')"><span>⭐ Yıldızlı Mesajlar</span></div>
 
         <div class="list-header">Topluluklar (Duyuru Kanalları)</div>
         <div id="communities-list"></div>
@@ -791,7 +893,10 @@
         <div class="list-header">Grupların</div>
         <div id="groups-list"></div>
 
-        <div class="list-header">Arkadaşların (Özel Sohbet)</div>
+        <div class="list-header">
+          <span>Arkadaşların (Özel Sohbet)</span>
+          <span style="cursor:pointer; text-transform:none; font-weight:normal;" onclick="toggleShowArchived()" id="archived-toggle-label">📦 Arşiv (<span id="archived-count">0</span>)</span>
+        </div>
         <div id="friends-list"></div>
       </div>
     </div>
@@ -802,13 +907,14 @@
           <div style="background: #ffffff; color: #000000; padding: 4px 10px; border-radius: 12px 12px 12px 2px; font-weight: bold; font-size: 0.75rem; text-align: center; line-height: 1.1;">
             Alim Yekta<br><span style="font-size: 0.65rem; color: #6366f1;">Ultra</span>
           </div>
-          <div>
+          <div onclick="openContactInfo()" style="cursor:pointer;">
             <h3 id="active-chat-title" style="font-size: 1rem;">Genel Oda</h3>
             <div id="active-chat-status" style="font-size: 0.7rem; color: var(--text-muted);">Çevrimiçi</div>
           </div>
         </div>
         <div style="display:flex; gap:6px;">
-          <button id="group-manage-btn" style="font-size:0.75rem; padding:4px 8px; background:#64748b; display:none;" onclick="openGroupManage()" title="Grup Ayarları">👥⚙️</button>
+          <button id="mute-chat-btn" style="font-size:0.75rem; padding:4px 8px; background:#64748b; display:none;" onclick="toggleMuteChat()" title="Sessize Al/Aç">🔔</button>
+          <button id="group-manage-btn" style="font-size:0.75rem; padding:4px 8px; background:#64748b; display:none;" onclick="openGroupManage()" title="Grup/Topluluk Ayarları">👥⚙️</button>
           <button style="font-size:0.75rem; padding:4px 8px; background:var(--danger-color);" onclick="sendSOS()" title="Acil Durum SOS">🚨 SOS</button>
           <button class="action-btn-form" onclick="startCall('voice')" title="Sesli Arama">📞</button>
           <button class="action-btn-form" onclick="startCall('video')" title="Görüntülü Arama">📹</button>
@@ -849,6 +955,8 @@
         <button class="action-btn" onclick="summarizeChat()">📝 AI Özetle</button>
         <button class="action-btn" onclick="generateAIImage()">🎨 AI Görsel Üret</button>
         <button class="action-btn" onclick="exportChatHistory()">📥 Sohbeti İndir</button>
+        <button class="action-btn" onclick="openModal('broadcast-modal')">📢 Toplu Mesaj</button>
+        <button class="action-btn" onclick="openModal('search-in-chat-modal')">🔎 Sohbette Ara</button>
         <button class="action-btn" onclick="clearChat()">🗑️ Temizle</button>
       </div>
 
@@ -1244,6 +1352,10 @@
       startTicker();
       loadNextQuizQuestion();
       listenForIncomingCalls();
+      startPresenceLoop();
+      loadAppearancePrefs();
+      listenTyping('global');
+      updateMuteButton();
 
       if (db) {
         db.ref('messages').on('child_added', snap => {
@@ -1321,9 +1433,13 @@
       });
       localStorage.setItem('chat_messages', JSON.stringify(messages));
 
-      // Grup Yönetim Butonu Görünürlüğü
+      // Grup/Topluluk Yönetim Butonu Görünürlüğü
       const gBtn = document.getElementById('group-manage-btn');
-      gBtn.style.display = groups[target] ? 'inline-flex' : 'none';
+      gBtn.style.display = (groups[target] || communities[target]) ? 'inline-flex' : 'none';
+
+      // Yazıyor göstergesi ve son görülme
+      listenTyping(target);
+      if (typeof updateMuteButton === 'function') updateMuteButton();
 
       // Sabitlenmiş Mesajı Göster
       const pinned = pinnedMessages[activeTarget];
@@ -1406,7 +1522,9 @@
       container.innerHTML = "";
 
       let currentMsgs;
-      if (isRoomTarget(activeTarget)) {
+      if (activeTarget === 'starred_messages') {
+        currentMsgs = messages.filter(m => m.starred && (m.sender === currentUser || m.target === currentUser));
+      } else if (isRoomTarget(activeTarget)) {
         currentMsgs = messages.filter(m => m.target === activeTarget);
       } else if (activeTarget === 'saved_messages') {
         currentMsgs = messages.filter(m => m.sender === currentUser && m.target === currentUser);
@@ -1439,6 +1557,9 @@
           replyHTML = `<div class="reply-preview-box"><span class="reply-user">@${m.replyTo.sender}</span>: ${m.replyTo.text.substring(0, 40)}...</div>`;
         }
 
+        let forwardTag = m.forwardedFrom ? `<div style="font-size:0.68rem; opacity:0.7; font-style:italic; margin-bottom:4px;">↗️ @${m.forwardedFrom} kullanıcısından iletildi</div>` : "";
+        let editedTag = m.edited ? ` <span style="font-size:0.6rem; opacity:0.6;">(düzenlendi)</span>` : "";
+
         let reactionsHTML = "";
         if (m.reactions && Object.keys(m.reactions).length > 0) {
           reactionsHTML = `<div class="message-reactions">`;
@@ -1455,6 +1576,9 @@
             <span onclick="addReaction('${m.id}', '👍')" title="Beğen">👍</span>
             <span onclick="addReaction('${m.id}', '😂')" title="Gül">😂</span>
             <span onclick="pinMessage('${m.id}')" title="Sabitle">📌</span>
+            <span onclick="toggleStar('${m.id}')" title="Yıldızla">${m.starred ? '⭐' : '☆'}</span>
+            <span onclick="forwardMessage('${m.id}')" title="İlet">↗️</span>
+            ${isSent ? `<span onclick="editMessage('${m.id}')" title="Düzenle">✏️</span>` : ''}
             ${isSent ? `<span onclick="deleteMessage('${m.id}')" title="Sil">🗑️</span>` : ''}
           </div>
         `;
@@ -1464,8 +1588,9 @@
           <div class="sender">
             <span>${isSent ? 'Sen' : '@' + m.sender}</span>
           </div>
+          ${forwardTag}
           ${replyHTML}
-          <div class="msg-text">${m.text}</div>
+          <div class="msg-text">${m.pollData ? renderPollHTML(m) : m.text}</div>${editedTag}
           ${reactionsHTML}
           <div class="message-meta">${m.time} ${tickHTML}</div>
         `;
@@ -1788,219 +1913,11 @@
       const list = document.getElementById('friends-list');
       list.innerHTML = "";
       const userFriends = friends[currentUser] || [];
+      const archivedList = archivedChats[currentUser] || [];
+      const archivedCountEl = document.getElementById('archived-count');
+      if (archivedCountEl) archivedCountEl.textContent = userFriends.filter(f => archivedList.includes(f)).length;
 
-      userFriends.forEach(f => {
-        const item = document.createElement('div');
-        item.className = "chat-item";
-        item.id = "item-" + f;
-        item.onclick = () => switchChat(f, "@" + f);
+      const visibleFriends = userFriends.filter(f => showArchived ? archivedList.includes(f) : !archivedList.includes(f));
 
-        let avatarHTML = avatars[f] ? `<img src="${avatars[f]}" style="width:28px;height:28px;border-radius:50%;margin-right:8px;object-fit:cover;">` : '👤 ';
-        const isBlocked = blockedUsers[currentUser] && blockedUsers[currentUser].includes(f);
-
-        item.innerHTML = `<span style="display:flex;align-items:center;">${avatarHTML} @${f}${isBlocked ? ' <span style="color:var(--danger-color); font-size:0.65rem; margin-left:4px;">(Engelli)</span>' : ''}</span>`;
-        list.appendChild(item);
-      });
-    }
-
-    /* ENGELLEME SİSTEMİ */
-    function blockUser() {
-      const target = document.getElementById('block-username-input').value.trim().toLowerCase();
-      if (!target) return alert("Kullanıcı adı giriniz!");
-      if (target === currentUser) return alert("Kendinizi engelleyemezsiniz!");
-      if (!blockedUsers[currentUser]) blockedUsers[currentUser] = [];
-      if (!blockedUsers[currentUser].includes(target)) {
-        blockedUsers[currentUser].push(target);
-        localStorage.setItem('chat_blocked', JSON.stringify(blockedUsers));
-        renderBlockedList();
-        renderFriendsList();
-        document.getElementById('block-username-input').value = "";
-        alert(`@${target} engellendi.`);
-      } else {
-        alert("Bu kullanıcı zaten engelli.");
-      }
-    }
-
-    function unblockUser(target) {
-      blockedUsers[currentUser] = (blockedUsers[currentUser] || []).filter(u => u !== target);
-      localStorage.setItem('chat_blocked', JSON.stringify(blockedUsers));
-      renderBlockedList();
-      renderFriendsList();
-    }
-
-    function renderBlockedList() {
-      const list = document.getElementById('blocked-list');
-      if (!list) return;
-      const blocked = blockedUsers[currentUser] || [];
-      if (blocked.length === 0) {
-        list.innerHTML = "<span style='color:var(--text-muted);'>Engellenen kullanıcı yok.</span>";
-        return;
-      }
-      list.innerHTML = "";
-      blocked.forEach(u => {
-        const row = document.createElement('div');
-        row.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;";
-        row.innerHTML = `<span>@${u}</span><button style="font-size:0.68rem; padding:3px 8px; background:#64748b;" onclick="unblockUser('${u}')">Kaldır</button>`;
-        list.appendChild(row);
-      });
-    }
-
-    /* GİZLİLİK AYARLARI */
-    function savePrivacySettings() {
-      if (!privacy[currentUser]) privacy[currentUser] = {};
-      privacy[currentUser].lastSeen = document.getElementById('privacy-lastseen').value;
-      privacy[currentUser].readReceipts = document.getElementById('privacy-read').value;
-      localStorage.setItem('chat_privacy', JSON.stringify(privacy));
-    }
-
-    function loadPrivacySettings() {
-      const p = privacy[currentUser] || { lastSeen: 'everyone', readReceipts: 'on' };
-      const lsSel = document.getElementById('privacy-lastseen');
-      const rrSel = document.getElementById('privacy-read');
-      if (lsSel) lsSel.value = p.lastSeen || 'everyone';
-      if (rrSel) rrSel.value = p.readReceipts || 'on';
-    }
-
-    function createGroup() {
-      const name = document.getElementById('group-name-input').value.trim();
-      if (!name) return alert("Grup adı giriniz!");
-      const id = "group_" + Date.now();
-      groups[id] = {
-        name: name,
-        description: "",
-        owner: currentUser,
-        admins: [currentUser],
-        members: [currentUser],
-        inviteCode: Math.random().toString(36).substring(2, 10)
-      };
-      localStorage.setItem('chat_groups', JSON.stringify(groups));
-      document.getElementById('group-name-input').value = "";
-      renderGroupsList();
-      alert(`👥 "${name}" grubu oluşturuldu! Sen kurucu ve yöneticisin.`);
-    }
-
-    function renderGroupsList() {
-      const list = document.getElementById('groups-list');
-      list.innerHTML = "";
-      Object.keys(groups).forEach(gid => {
-        const g = groups[gid];
-        if (g.members.includes(currentUser)) {
-          const item = document.createElement('div');
-          item.className = "chat-item";
-          item.id = "item-" + gid;
-          item.onclick = () => switchChat(gid, "👥 " + g.name);
-          const isAdmin = g.admins && g.admins.includes(currentUser);
-          item.innerHTML = `<span>👥 ${g.name}${isAdmin ? ' <span class="role-tag' + (g.owner===currentUser?' owner':'') + '">' + (g.owner===currentUser?'Kurucu':'Admin') + '</span>' : ''}</span>`;
-          list.appendChild(item);
-        }
-      });
-    }
-
-    /* GRUP YÖNETİMİ (YENİ) */
-    function openGroupManage() {
-      const g = groups[activeTarget];
-      if (!g) return;
-      document.getElementById('group-manage-title').textContent = "👥 " + g.name + " - Yönetim";
-      document.getElementById('group-edit-name').value = g.name;
-      document.getElementById('group-edit-desc').value = g.description || "";
-      document.getElementById('group-invite-code').value = g.inviteCode;
-      document.getElementById('group-delete-btn').style.display = (g.owner === currentUser) ? 'block' : 'none';
-      renderGroupMembers();
-      openModal('group-manage-modal');
-    }
-
-    function isGroupAdmin(g) {
-      return g && g.admins && g.admins.includes(currentUser);
-    }
-
-    function renderGroupMembers() {
-      const g = groups[activeTarget];
-      if (!g) return;
-      const list = document.getElementById('group-members-list');
-      list.innerHTML = "";
-      const amAdmin = isGroupAdmin(g);
-
-      g.members.forEach(m => {
-        const isOwner = g.owner === m;
-        const isAdmin = g.admins.includes(m);
-        const row = document.createElement('div');
-        row.className = 'member-row';
-        row.innerHTML = `
-          <span>@${m} ${isOwner ? '<span class="role-tag owner">Kurucu</span>' : (isAdmin ? '<span class="role-tag">Admin</span>' : '')}</span>
-          <div class="m-actions">
-            ${(amAdmin && !isOwner && m !== currentUser) ? `
-              ${isAdmin ? `<button onclick="demoteMember('${m}')">Adminliği Al</button>` : `<button onclick="promoteMember('${m}')">Admin Yap</button>`}
-              <button class="btn-danger" onclick="removeMember('${m}')">Çıkar</button>
-            ` : ''}
-          </div>
-        `;
-        list.appendChild(row);
-      });
-    }
-
-    function saveGroupInfo() {
-      const g = groups[activeTarget];
-      if (!g) return;
-      if (!isGroupAdmin(g)) return alert("Sadece yöneticiler grup bilgilerini değiştirebilir.");
-      g.name = document.getElementById('group-edit-name').value.trim() || g.name;
-      g.description = document.getElementById('group-edit-desc').value.trim();
-      localStorage.setItem('chat_groups', JSON.stringify(groups));
-      renderGroupsList();
-      switchChat(activeTarget, "👥 " + g.name);
-      alert("Grup bilgileri güncellendi!");
-    }
-
-    function copyInviteCode() {
-      const input = document.getElementById('group-invite-code');
-      input.select();
-      try { document.execCommand('copy'); alert("Davet kodu kopyalandı!"); }
-      catch(e) { alert("Kod: " + input.value); }
-    }
-
-    function regenerateInvite() {
-      const g = groups[activeTarget];
-      if (!g) return;
-      if (!isGroupAdmin(g)) return alert("Sadece yöneticiler davet kodunu yenileyebilir.");
-      g.inviteCode = Math.random().toString(36).substring(2, 10);
-      localStorage.setItem('chat_groups', JSON.stringify(groups));
-      document.getElementById('group-invite-code').value = g.inviteCode;
-      alert("Yeni davet kodu oluşturuldu!");
-    }
-
-    function addGroupMember() {
-      const g = groups[activeTarget];
-      if (!g) return;
-      if (!isGroupAdmin(g)) return alert("Sadece yöneticiler üye ekleyebilir.");
-      const uname = document.getElementById('group-add-member-input').value.trim().toLowerCase();
-      if (!uname) return alert("Kullanıcı adı giriniz!");
-      if (g.members.includes(uname)) return alert("Bu kullanıcı zaten grup üyesi.");
-      g.members.push(uname);
-      localStorage.setItem('chat_groups', JSON.stringify(groups));
-      document.getElementById('group-add-member-input').value = "";
-      renderGroupMembers();
-      alert(`@${uname} gruba eklendi!`);
-    }
-
-    function promoteMember(username) {
-      const g = groups[activeTarget];
-      if (!g || !isGroupAdmin(g)) return;
-      if (!g.admins.includes(username)) g.admins.push(username);
-      localStorage.setItem('chat_groups', JSON.stringify(groups));
-      renderGroupMembers();
-      renderGroupsList();
-    }
-
-    function demoteMember(username) {
-      const g = groups[activeTarget];
-      if (!g || !isGroupAdmin(g)) return;
-      if (g.owner === username) return alert("Kurucunun adminliği alınamaz.");
-      g.admins = g.admins.filter(a => a !== username);
-      localStorage.setItem('chat_groups', JSON.stringify(groups));
-      renderGroupMembers();
-      renderGroupsList();
-    }
-
-    function removeMember(username) {
-      const g = groups[activeTarget];
-      if (!g || !isGroupAdmin(g)) return;
-      if (g.owner === username
+      if (visibleFriends.length === 0) {
+        list.innerHTML = `<p style="padding:10px 14px; fon
